@@ -1,0 +1,11 @@
+{
+  "name": "bma62-SE3314b-assignment2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "/GetImage.js",
+  "dependencies": {
+    "yargs": "^16.2.0"
+  },
+  "author": "Boyi Ma",
+  "license": "ISC"
+}
