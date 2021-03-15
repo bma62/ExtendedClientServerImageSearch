@@ -30,7 +30,7 @@ module.exports = {
 
     // Check if the peer table is full before inserting more peers
     isPeerTableFull: function() {
-        return peerAddressTable.length === peerTableSize;
+        return peerAddressTable.length == peerTableSize;
     },
 
     // Insert a new peer into the peer table

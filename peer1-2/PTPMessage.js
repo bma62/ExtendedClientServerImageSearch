@@ -4,7 +4,7 @@ let packet = Buffer.alloc(0);
 
 module.exports = {
 
-  // Init an ITP request packet
+  // Init a PTP packet
   init: function (version, messageType, senderID, peerAddressTable, peerPortTable) {
 
     let senderIDLength = senderID.length;

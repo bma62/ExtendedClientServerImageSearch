@@ -8,6 +8,7 @@ const PTPpacket = require('./PTPMessage'),
     handler = require('./ClientsHandler');
 
 const defaultOption = 'Peer info not provided.',
+    host = '127.0.0.1',
     peerID = path.basename(process.cwd()).split('-')[0],
     peerTableSize = path.basename(process.cwd()).split('-')[1];
 
@@ -35,16 +36,16 @@ net.bytesWritten = 300000;
 net.bytesRead = 300000;
 net.bufferSize = 300000;
 
-singleton.init(peerTableSize);
+singleton.init(peerID, peerTableSize);
 
 // **** CLIENT-SIDE CODE ****
+const client = new net.Socket();
+
 // Check if -p option is provided
 if (argv.p !== defaultOption) {
     // Read command line inputs in
     const peer = argv.p.split(':')[0],
         port = Number(argv.p.split(':')[1]);
-
-    const client = new net.Socket();
 
     let assignedPort;
 
@@ -52,7 +53,7 @@ if (argv.p !== defaultOption) {
     client.connect(port, peer, () => {
     });
 
-    let peerPacket = Buffer.alloc(0);
+    let peerPacket = Buffer.alloc(0), peerAddressTable = [], peerPortTable = [], redirectCounter = 0;
     client.on('data', (data) => {
 
         // Concatenate received data in case the packet is divided into multiple chunks
@@ -64,36 +65,57 @@ if (argv.p !== defaultOption) {
             // Remove the delimiter
             peerPacket = peerPacket.slice(0, -1);
 
-            decodePacket(peerPacket);
+            // Decode the packet and retrieve peer table received from the peer if any
+            const peerResults = decodePacket(peerPacket);
+            const redirect = peerResults.redirect;
+            peerAddressTable = peerResults.peerAddressTable;
+            peerPortTable = peerResults.peerPortTable;
+
+            // If redirect is false and the peer table is null, then the version/messageType is not recognized, so exit
+            if (!redirect && peerAddressTable === null) {
+                return;
+            }
+            // Redirect is false but the peer table is not null, then connection is successful, start the server side functionality
+            else if (!redirect) {
+                // After connecting to a peer, start the server side
+                assignedPort = client.localPort;
+
+                let peerServer = net.createServer();
+                // let OS assign an unused port, use '0.0.0.0' to explicitly accept IPv4 only
+                peerServer.listen(assignedPort, host, () => {
+                    console.log(`This peer address is ${peerServer.address().address}:${peerServer.address().port} located at ${peerID}`);
+                });
+
+                peerServer.on('connection', function (sock) {
+                    handler.handleClientJoining(sock); //called for each client joining
+                });
+            }
+            // If redirect is true, perform redirect by trying to connect to the next peer found in table
+            else if (redirect && (peerAddressTable.length == 0 || peerAddressTable.length == redirectCounter)){
+                return;
+            }
+            // Try redirecting to another peer
+            else {
+                console.log(`Redirecting to ${peerAddressTable[redirectCounter]}:${peerPortTable[redirectCounter]}`);
+                // client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter]);
+                // ++redirectCounter;
+            }
+
         }
     });
 
-    console.log(`Connected to the peer XXXX at timestamp: ${singleton.getTimestamp()}`);
-
-    assignedPort = client.localPort;
-
-    let peerServer = net.createServer();
-    // let OS assign an unused port, use '0.0.0.0' to explicitly accept IPv4 only
-    peerServer.listen(assignedPort, '0.0.0.0', () => {
-        console.log(`This peer address is ${peerServer.address().address}:${peerServer.address().port} located at ${peerID}`);
-    });
-
-    peerServer.on('connection', function (sock) {
-        handler.handleClientJoining(sock); //called for each client joining
-    });
-
-        // // Send packet through and add a one-byte delimiter for server to concatenate buffer chunks
-        // let packet = PTPpacket.getBytePacket(),
-        //     delimiter = Buffer.from('\n');
-        //
-        // packet = Buffer.concat([packet, delimiter]);
-        // client.write(packet);
+    // Socket fully closed because redirecting has to be performed
+client.on('close', () => {
+    console.log('Connection closed.');
+    client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter]);
+    ++redirectCounter;
+});
 }
 else {
     // **** SERVER-SIDE CODE ****
     let peerServer = net.createServer();
     // let OS assign an unused port, use '0.0.0.0' to explicitly accept IPv4 only
-    peerServer.listen( 0, '0.0.0.0', () => {
+    peerServer.listen( 0, host, () => {
         console.log(`This peer address is ${peerServer.address().address}:${peerServer.address().port} located at ${peerID}`);
     });
 
@@ -114,107 +136,70 @@ else {
 // });
 //
 function decodePacket(packet) {
-    console.log('Server sent:');
+    // DEBUG
+    console.log(`Received: ${packet}`);
 
     // Read first 4 bytes of the header, convert to binary string, and pad to 32-bit length
     let bufferOffset = 0;
     let header = helpers.padStringToLength(helpers.int2bin(packet.readUInt32BE(bufferOffset)), 32);
     bufferOffset = bufferOffset + 4;
 
-    // First 3 bits is the version
+    // First 3 bits is the version, if not 7 ignore the packet
     let version = helpers.bin2int(header.substring(0, 3));
-    console.log(`\t--ITP version: ${version}`);
-
-    let isFulfilled = header.substring(3, 4);
-    if (isFulfilled === '0') {
-        isFulfilled = 'No';
+    if (version !== 7) {
+        return {
+            redirect: false,
+            peerAddressTable: null,
+            peerPortTable: null
+        };
     }
-    else {
-        isFulfilled = 'Yes';
-    }
-    console.log(`\t--Fulfilled: ${isFulfilled}`);
 
-    let responseType = helpers.bin2int(header.substring(4, 12));
-    switch (responseType) {
-        case 0:
-            responseType = 'Query';
-            break;
+    let messageType = helpers.bin2int(header.substring(3, 11));
+    let numberOfPeers = helpers.bin2int(header.substring(11, 24));
+    let senderIDLength = helpers.bin2int(header.substring(24));
+    let senderID = packet.slice(bufferOffset, bufferOffset + senderIDLength).toString();
+    bufferOffset = bufferOffset + senderIDLength;
+
+    let peerAddressTable = [], peerPortTable = [];
+    for (let i = 0; i < numberOfPeers; i++) {
+
+        // Convert to ipv4
+        let IPString = helpers.padStringToLength(helpers.int2bin(packet.readUInt32BE(bufferOffset)), 32);
+        bufferOffset = bufferOffset + 4;
+
+        IPString = helpers.bin2int(IPString.substring(0,8)) + '.' +
+            helpers.bin2int(IPString.substring(8,16)) + '.' +
+            helpers.bin2int(IPString.substring(16,24)) + '.' +
+            helpers.bin2int(IPString.substring(24,32));
+        peerAddressTable.push(IPString);
+
+        peerPortTable.push(packet.readUInt16BE(bufferOffset));
+        bufferOffset = bufferOffset + 2;
+    }
+
+    switch (messageType) {
         case 1:
-            responseType = 'Found';
-            break;
+            console.log(`Connected to peer ${senderID}:${client.remotePort} at timestamp: ${singleton.getTimestamp()}`);
+            console.log(`Received ack from ${senderID}:${client.remotePort}`);
+            return {
+                redirect: false,
+                peerAddressTable: peerAddressTable,
+                peerPortTable: peerPortTable
+            };
         case 2:
-            responseType = 'Not Found';
-            break;
-        case 3:
-            responseType = 'Busy';
-            break;
+            console.log('The join has been declined; the auto-join process is performing...');
+            // TODO: redirect steps
+            return {
+                redirect: true,
+                peerAddressTable: peerAddressTable,
+                peerPortTable: peerPortTable
+            };
         default:
-            responseType = 'Not Recognized';
+            //Ignore if message type is not recognized
+            return {
+                redirect: false,
+                peerAddressTable: null,
+                peerPortTable: null
+            };
     }
-    console.log(`\t--Response Type: ${responseType}`);
-
-    let imageCount = helpers.bin2int(header.substring(12, 17));
-    console.log(`\t--Image Count: ${imageCount}`);
-
-    let sequenceNumber = helpers.bin2int(header.substring(17));
-    console.log(`\t--Sequence Number: ${sequenceNumber}`);
-
-    // Second 4 bytes of the header is timestamp
-    let timestamp = packet.readUInt32BE(bufferOffset);
-    bufferOffset = bufferOffset + 4;
-    console.log(`\t--Timestamp: ${timestamp}`);
-
-    // Payload section
-    let imageType = '',
-        fileNameSize = 0,
-        imageSize = 0,
-        fileName = '',
-        promises = [];
-
-    // Repeat payload section reading for each image
-    for (let i = 0; i < imageCount; i++) {
-
-        header = helpers.padStringToLength(helpers.int2bin(packet.readUInt16BE(bufferOffset)), 16);
-        bufferOffset = bufferOffset + 2;
-
-        imageType = helpers.bin2int(header.substring(0, 4));
-        imageType = helpers.getImageExtension(imageType);
-        fileNameSize = helpers.bin2int(header.substring(4));
-
-        imageSize = packet.readUInt16BE(bufferOffset);
-        bufferOffset = bufferOffset + 2;
-
-        fileName = packet.slice(bufferOffset, bufferOffset + fileNameSize).toString();
-        bufferOffset = bufferOffset + fileNameSize;
-
-        let imageData = Buffer.from(packet.slice(bufferOffset, bufferOffset + imageSize));
-        bufferOffset = bufferOffset + imageSize;
-
-        // Write the image data to file asynchronously
-        promises.push(writeToFile(fileName, imageType, imageData));
-    }
-
-    // Wait until all writes are done, then open them
-    Promise.all(promises)
-        .then((fileNames) => {
-
-            // Clear the promises array and reuse for opening the files asynchronously
-            promises = [];
-            fileNames.forEach( fileName => {
-                promises.push(open(fileName));
-            })
-
-            // Wait for all files to be opened
-            Promise.all(promises)
-                .then( ()=>{
-                    // All files are open, close the connection
-                    client.end();
-                })
-                .catch(err => {
-                    console.log(err);
-                })
-        })
-        .catch(err => {
-            console.log(err);
-        })
 }
