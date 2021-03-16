@@ -14,9 +14,6 @@ module.exports = {
     packet = Buffer.alloc(packetLength);
 
     // Convert version from integer to binary and pad to 3 bits
-    if (version !== 7) {
-      throw new Error('Version not supported!');
-    }
     version = helpers.padStringToLength(helpers.int2bin(version), 3, 'Version not supported!');
 
     messageType = helpers.padStringToLength(helpers.int2bin(messageType), 8, 'Message type not supported!');
@@ -46,6 +43,8 @@ module.exports = {
 
       packet.write(helpers.bin2hex(peerIPBits), bufferOffset, 4, 'hex');
       bufferOffset = bufferOffset + 4;
+      //TODO: remove for debug
+      console.log(`Converted IP: ${peerIPBits}`);
 
       packet.writeUInt16BE(peerPortTable[index], bufferOffset);
       bufferOffset = bufferOffset + 2;
