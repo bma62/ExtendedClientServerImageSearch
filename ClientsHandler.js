@@ -30,7 +30,7 @@ module.exports = {
         // If the peer table is not full, accept connection and update peer table
         else {
 
-            console.log(`Connected from peer: ${peerAddress}:${peerPort}`);
+            console.log(`Connected from peer: ${peerAddress}:${peerPort}\n`);
 
             // Form welcome packet
             PTPpacket.init(singleton.getPTPVersion(), 1, singleton.getSenderID(),

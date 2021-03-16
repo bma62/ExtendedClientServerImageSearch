@@ -177,8 +177,6 @@ function decodePacket(packet, senderAddress, senderPort) {
             helpers.bin2int(IPString.substring(8,16)) + '.' +
             helpers.bin2int(IPString.substring(16,24)) + '.' +
             helpers.bin2int(IPString.substring(24,32));
-        //TODO: remove for debug
-        console.log(`Decoded IP: ${IPString}`);
         peerAddressTable.push(IPString);
 
         peerPortTable.push(packet.readUInt16BE(bufferOffset));

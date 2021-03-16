@@ -38,13 +38,11 @@ module.exports = {
       // Convert IP address to 32 bits
       let peerIPBits = '';
       peerAddress.split('.').forEach( octet => {
-        peerIPBits += helpers.padStringToLength(helpers.int2bin(octet), 8, `Error converting peer IP address ${peerAddress}`);
+        peerIPBits += helpers.padStringToLength(helpers.int2bin(Number(octet)), 8, `Error converting peer IP address ${peerAddress}`);
       })
 
       packet.write(helpers.bin2hex(peerIPBits), bufferOffset, 4, 'hex');
       bufferOffset = bufferOffset + 4;
-      //TODO: remove for debug
-      console.log(`Converted IP: ${peerIPBits}`);
 
       packet.writeUInt16BE(peerPortTable[index], bufferOffset);
       bufferOffset = bufferOffset + 2;
@@ -52,7 +50,7 @@ module.exports = {
   },
 
   //--------------------------
-  //getpacket: returns the entire packet
+  //getPacket: returns the entire packet
   //--------------------------
   getPacket: function() {
     return packet;
