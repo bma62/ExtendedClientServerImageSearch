@@ -1,15 +1,16 @@
-
-let timer, senderID, peerAddressTable, peerPortTable, peerTableSize;
+// Some properties of this peer node
+let timer, PTPVersion, senderID, peerAddressTable, peerPortTable, peerTableSize;
 
 module.exports = {
-    init: function(peerID, tableSize) {
 
-        // Initialize timer and sequenceNumber with a random number between 1 and 999
+    init: function(version, peerID, tableSize) {
+        // Initialize timer with a random number between 1 and 999
         timer = Math.floor((Math.random() * 999) + 1);
 
         // Increment timer every 10ms
         setInterval(incrementTimer, 10);
 
+        PTPVersion = version;
         senderID = peerID;
         peerAddressTable = [];
         peerPortTable = [];
@@ -23,14 +24,19 @@ module.exports = {
         return timer;
     },
 
+    // Return the PTP version to use in the packet header
+    getPTPVersion: function() {
+        return PTPVersion;
+    },
+
     // Return the sender ID of this peer
     getSenderID: function () {
         return senderID;
     },
 
-    // Check if the peer table is full before inserting more peers
+    // Check if the peer table is full
     isPeerTableFull: function() {
-        return peerAddressTable.length == peerTableSize;
+        return peerAddressTable.length === peerTableSize;
     },
 
     // Insert a new peer into the peer table

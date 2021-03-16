@@ -1,4 +1,3 @@
-
 // Helper functions used throughout the program
 module.exports = {
 

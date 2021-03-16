@@ -35,8 +35,10 @@ module.exports = {
         .copy(packet, bufferOffset);
     bufferOffset = bufferOffset + senderIDLength;
 
+    // Repeat for each peer table entry
     peerAddressTable.forEach( (peerAddress, index) => {
 
+      // Convert IP address to 32 bits
       let peerIPBits = '';
       peerAddress.split('.').forEach( octet => {
         peerIPBits += helpers.padStringToLength(helpers.int2bin(octet), 8, `Error converting peer IP address ${peerAddress}`);
@@ -54,7 +56,6 @@ module.exports = {
   //getpacket: returns the entire packet
   //--------------------------
   getPacket: function() {
-    // enter your code here
     return packet;
   }
 };
