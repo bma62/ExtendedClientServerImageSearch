@@ -39,7 +39,8 @@ net.bufferSize = 300000;
 singleton.init(peerID, peerTableSize);
 
 // **** CLIENT-SIDE CODE ****
-const client = new net.Socket();
+let client = new net.Socket();
+let peerPacket = Buffer.alloc(0), peerAddressTable = [], peerPortTable = [], redirectCounter = 0;
 
 // Check if -p option is provided
 if (argv.p !== defaultOption) {
@@ -53,7 +54,6 @@ if (argv.p !== defaultOption) {
     client.connect(port, peer, () => {
     });
 
-    let peerPacket = Buffer.alloc(0), peerAddressTable = [], peerPortTable = [], redirectCounter = 0;
     client.on('data', (data) => {
 
         // Concatenate received data in case the packet is divided into multiple chunks
@@ -61,6 +61,7 @@ if (argv.p !== defaultOption) {
 
         // Check for the delimiter for complete packet
         if (peerPacket.slice(-1).toString() === '\n') {
+
             // console.log('full packet received');
             // Remove the delimiter
             peerPacket = peerPacket.slice(0, -1);
@@ -105,11 +106,17 @@ if (argv.p !== defaultOption) {
     });
 
     // Socket fully closed because redirecting has to be performed
-client.on('close', () => {
-    console.log('Connection closed.');
-    client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter]);
-    ++redirectCounter;
-});
+    client.on('close', () => {
+        peerPacket = Buffer.alloc(0);
+        // client.destroy();
+        // client = new net.Socket(); // Get a new port for reconnection
+
+
+        client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter], () => {
+            ++redirectCounter;
+            // console.log('Reconnection successful');
+        });
+    });
 }
 else {
     // **** SERVER-SIDE CODE ****
@@ -136,8 +143,6 @@ else {
 // });
 //
 function decodePacket(packet) {
-    // DEBUG
-    console.log(`Received: ${packet}`);
 
     // Read first 4 bytes of the header, convert to binary string, and pad to 32-bit length
     let bufferOffset = 0;
