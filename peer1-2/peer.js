@@ -69,8 +69,12 @@ if (argv.p !== defaultOption) {
             // Decode the packet and retrieve peer table received from the peer if any
             const peerResults = decodePacket(peerPacket);
             const redirect = peerResults.redirect;
-            peerAddressTable = peerResults.peerAddressTable;
-            peerPortTable = peerResults.peerPortTable;
+
+            // If the peer table is not empty, then we are doing reconnections and the table should not be overwritten
+            if (peerAddressTable.length == 0) {
+                peerAddressTable = peerResults.peerAddressTable;
+                peerPortTable = peerResults.peerPortTable;
+            }
 
             // If redirect is false and the peer table is null, then the version/messageType is not recognized, so exit
             if (!redirect && peerAddressTable === null) {
@@ -107,10 +111,9 @@ if (argv.p !== defaultOption) {
 
     // Socket fully closed because redirecting has to be performed
     client.on('close', () => {
-        peerPacket = Buffer.alloc(0);
+        peerPacket = Buffer.alloc(0); // Clear the buffer used for previous packet
         // client.destroy();
         // client = new net.Socket(); // Get a new port for reconnection
-
 
         client.connect(peerPortTable[redirectCounter], peerAddressTable[redirectCounter], () => {
             ++redirectCounter;
